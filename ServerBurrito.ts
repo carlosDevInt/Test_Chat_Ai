@@ -12,9 +12,10 @@ app.use(express.json());
 
 // Instancia del proveedor de Vertex AI
 const vertex = createVertex({
-  project: process.env.GOOGLE_CLOUD_PROJECT || "my-project",
+  // project: process.env.GOOGLE_CLOUD_PROJECT || "my-project",
   location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
-  apiKey: process.env.GOOGLE_BURRITO_AI_API_KEY,
+  apiKey: process.env.GOOGLE_BURRITO_AI_API_KEY || process.env.GOOGLE_BURRITO_AI_API_KEY2,
+  project: process.env.GOOGLR_BURRITO_CHATS_AI_API_KEY,
 });
 
 // ─── Endpoint 1: Generación de Texto / Chat ──────────────────────────────────

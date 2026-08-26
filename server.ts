@@ -35,4 +35,7 @@ app.post("/chat", async (req, res) => {
 
 app.listen(3001, () => {
     console.log("Servidor funcionando");
+    console.log("API Key starts with:", process.env.GOOGLE_GENERATIVE_AI_API_KEY?.substring(0, 5));
+    console.log("PORT:", process.env.PORT || 3001);
+    console.log("Gemini chat text modelo funcionando "+ (process.env.GOOGLE_GENERATIVE_AI_API_KEY ? "✅" : "❌"));
 });
