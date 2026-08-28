@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { createVertex } from "@ai-sdk/google-vertex";
-import { generateText, experimental_generateImage as generateImage } from "ai";
+import { generateText, generateImage } from "ai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -15,7 +15,7 @@ const vertex = createVertex({
   // project: process.env.GOOGLE_CLOUD_PROJECT || "my-project",
   location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
   apiKey: process.env.GOOGLE_BURRITO_AI_API_KEY || process.env.GOOGLE_BURRITO_AI_API_KEY2,
-  project: process.env.GOOGLR_BURRITO_CHATS_AI_API_KEY,
+  project: process.env.GOOGLE_CLOUD_PROJECT,
 });
 
 // ─── Endpoint 1: Generación de Texto / Chat ──────────────────────────────────
@@ -54,7 +54,7 @@ app.post("/generate-image", async (req, res) => {
 
     // 1. Generar la imagen con Imagen 3
     const { image } = await generateImage({
-      model: vertex.image("imagen-3.0-generate-001"),
+      model: vertex.image("gemini-3-pro-image-preview"),
       prompt: prompt.trim(),
       aspectRatio: "1:1",
     });
