@@ -1,8 +1,14 @@
 import express from "express";
 import cors from "cors";
-import { createVertex } from "@ai-sdk/google-vertex";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText, generateImage } from "ai";
 import dotenv from "dotenv";
+
+// import express from "express";
+// import cors from "cors";
+// import { createVertex } from "@ai-sdk/google-vertex";
+// import { generateText, generateImage } from "ai";
+// import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -10,13 +16,19 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Instancia del proveedor de Vertex AI
-const vertex = createVertex({
-  // project: process.env.GOOGLE_CLOUD_PROJECT || "my-project",
-  location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
-  apiKey: process.env.GOOGLE_BURRITO_AI_API_KEY || process.env.GOOGLE_BURRITO_AI_API_KEY2,
-  project: process.env.GOOGLE_CLOUD_PROJECT,
+
+//Google AI Studio
+const google = createGoogleGenerativeAI({
+  apiKey:process.env.GOOGLE_GENERATIVE_AI_API_KEY ||process.env.GOOGLE_BURRITO_AI_API_KEY || process.env.GOOGLE_BURRITO_AI_API_KEY2,
 });
+
+// // Instancia del proveedor de Vertex AI
+// const vertex = createVertex({
+//   // project: process.env.GOOGLE_CLOUD_PROJECT || "my-project",
+//   location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
+//   apiKey: process.env.GOOGLE_BURRITO_AI_API_KEY || process.env.GOOGLE_BURRITO_AI_API_KEY2,
+//   project: process.env.GOOGLE_CLOUD_PROJECT,
+// });
 
 // ─── Endpoint 1: Generación de Texto / Chat ──────────────────────────────────
 app.post("/chat", async (req, res) => {
@@ -28,8 +40,14 @@ app.post("/chat", async (req, res) => {
       return;
     }
 
+    // const { text } = await generateText({
+    //   model: vertex("gemini-2.0-flash-001"), // Se usa la constante 'vertex' instanciada arriba
+    //   prompt,
+    // });
+
+    // En /chat:
     const { text } = await generateText({
-      model: vertex("gemini-2.0-flash-001"), // Se usa la constante 'vertex' instanciada arriba
+      model: google("gemini-3.1-flash-lite"),
       prompt,
     });
 
@@ -52,16 +70,23 @@ app.post("/generate-image", async (req, res) => {
       return;
     }
 
-    // 1. Generar la imagen con Imagen 3
+    // // 1. Generar la imagen con Imagen 3
+    // const { image } = await generateImage({
+    //   model: vertex.image("gemini-3-pro-image-preview"),
+    //   prompt: prompt.trim(),
+    //   aspectRatio: "1:1",
+    // });
+
+    // En /generate-image:
     const { image } = await generateImage({
-      model: vertex.image("gemini-3-pro-image-preview"),
+      model: google.image("gemini-3-pro-image-preview"),
       prompt: prompt.trim(),
       aspectRatio: "1:1",
     });
 
     // 2. Describir la imagen con Gemini Pro/Flash
     const { text: imageExplanation } = await generateText({
-      model: vertex("gemini-2.0-flash-001"),
+      model: google("gemini-3.1-flash-lite"),
       prompt: [
         {
           role: "user",
