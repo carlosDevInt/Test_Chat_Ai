@@ -1,7 +1,8 @@
 import express from "express";
 import cors from "cors";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText, generateImage } from "ai";
+import { generateImage, generateText } from "ai";
+import { createXai } from "@ai-sdk/xai";
 import dotenv from "dotenv";
 
 // import express from "express";
@@ -20,6 +21,10 @@ app.use(express.json());
 //Google AI Studio
 const google = createGoogleGenerativeAI({
   apiKey:process.env.GOOGLE_GENERATIVE_AI_API_KEY ||process.env.GOOGLE_BURRITO_AI_API_KEY || process.env.GOOGLE_BURRITO_AI_API_KEY2,
+});
+
+const xai = createXai({
+  apiKey: process.env.XAI_API_KEY || process.env.GROK_API_KEY,
 });
 
 // // Instancia del proveedor de Vertex AI
@@ -77,12 +82,21 @@ app.post("/generate-image", async (req, res) => {
     //   aspectRatio: "1:1",
     // });
 
-    // En /generate-image:
-    const { image } = await generateImage({
-      model: google.image("gemini-3-pro-image-preview"),
+    const { images } = await generateImage({
+      // model: xai.image("grok-imagine-image-quality"),
+      model: xai.image("grok-imagine-image"),
       prompt: prompt.trim(),
-      aspectRatio: "1:1",
+      providerOptions: {
+        xai: { quality: "high" },
+      },
     });
+
+    if (!images[0]) {
+      throw new Error("xAI no devolvió una imagen.");
+    }
+
+    const image = images[0];
+    const imageBytes = image.uint8Array;
 
     // 2. Describir la imagen con Gemini Pro/Flash
     const { text: imageExplanation } = await generateText({
@@ -97,7 +111,7 @@ app.post("/generate-image", async (req, res) => {
             },
             {
               type: "image",
-              image: image.uint8Array, // Solo pasas los datos binarios directamente
+              image: imageBytes,
             },
           ],
         },
@@ -106,13 +120,19 @@ app.post("/generate-image", async (req, res) => {
 
     res.json({
       image: image.base64,
-      mimeType: "image/jpeg",
+      mimeType: image.mediaType,
       explanation: imageExplanation,
     });
   } catch (error) {
-    console.error("Error generando imagen o descripción con Vertex AI:", error);
-    res.status(500).json({
-      error: "Error en el procesamiento con Vertex AI",
+    const apiError = error as { statusCode?: number; message?: string };
+    const isXaiBillingError = apiError.statusCode === 403 &&
+      apiError.message?.includes("credits or licenses");
+
+    console.error("Error generando imagen o descripción con xAI/Gemini:", error);
+    res.status(isXaiBillingError ? 402 : 500).json({
+      error: isXaiBillingError
+        ? "La cuenta de xAI no tiene créditos o licencia activa."
+        : "Error en el procesamiento con xAI/Gemini",
       details: error instanceof Error ? error.message : String(error),
     });
   }

@@ -1,8 +1,8 @@
 import {
   createJsonErrorResponseHandler,
-  type InferSchema,
   lazySchema,
   zodSchema,
+  type InferSchema,
 } from '@ai-sdk/provider-utils';
 import { z } from 'zod/v4';
 
@@ -13,6 +13,7 @@ const googleErrorDataSchema = lazySchema(() =>
         code: z.number().nullable(),
         message: z.string(),
         status: z.string(),
+        details: z.array(z.unknown()).nullish(),
       }),
     }),
   ),

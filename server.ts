@@ -14,14 +14,30 @@ app.use(express.json());
 
 app.post("/chat", async (req, res) => {
     try {
-        const { prompt } = req.body;
+        const { prompt, messages } = req.body;
 
-        const { text } = await generateText({
-            model: google("gemini-3.1-flash-lite"), 
-            prompt,
-        });
+        let resultText = "";
 
-        res.json({ text });
+        if (Array.isArray(messages) && messages.length > 0) {
+            const formattedMessages = messages.map((m: any) => ({
+                role: m.rol === "ia" || m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+                content: m.texto || m.content || "",
+            }));
+
+            const { text } = await generateText({
+                model: google("gemini-3.1-flash-lite"),
+                messages: formattedMessages,
+            });
+            resultText = text;
+        } else {
+            const { text } = await generateText({
+                model: google("gemini-3.1-flash-lite"), 
+                prompt,
+            });
+            resultText = text;
+        }
+
+        res.json({ text: resultText });
 
     } catch (error) {
         console.error(error);

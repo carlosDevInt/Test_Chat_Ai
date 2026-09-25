@@ -65,12 +65,14 @@ const Chats_ai: React.FC = () => {
     const [mensajes, setMensajes] = useState<Mensaje[]>([]);
     const [cargando, setCargando] = useState(false);
     const [chatsGuardados, setChatsGuardados] = useState<ChatGuardado[]>([]);
+    const [chatActivoId, setChatActivoId] = useState<string | null>(null);
     const [sidebarAbierta, setSidebarAbierta] = useState(false);
     const [busquedaHistorial, setBusquedaHistorial] = useState("");
     const [copiadoIndex, setCopiadoIndex] = useState<number | null>(null);
     const [notificacion, setNotificacion] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const cargadoRef = useRef(false);
 
     // Cargar chats desde localStorage al iniciar
     useEffect(() => {
@@ -81,15 +83,34 @@ const Chats_ai: React.FC = () => {
             }
         } catch (e) {
             console.error("Error al cargar historial:", e);
+        } finally {
+            cargadoRef.current = true;
         }
     }, []);
 
     // Guardar chats en localStorage cuando cambien
     useEffect(() => {
-        if (chatsGuardados.length > 0) {
-            localStorage.setItem("chats_astro_ai", JSON.stringify(chatsGuardados));
-        }
+        if (!cargadoRef.current) return;
+        localStorage.setItem("chats_astro_ai", JSON.stringify(chatsGuardados));
     }, [chatsGuardados]);
+
+    // Sincronizar automáticamente la conversación actual con el chat guardado si está abierto
+    useEffect(() => {
+        if (!chatActivoId || mensajes.length === 0) return;
+
+        setChatsGuardados(prev => {
+            const chatExistente = prev.find(c => c.id === chatActivoId);
+            if (!chatExistente) return prev;
+
+            if (chatExistente.mensajes === mensajes) return prev;
+
+            return prev.map(c => 
+                c.id === chatActivoId 
+                    ? { ...c, mensajes: [...mensajes] }
+                    : c
+            );
+        });
+    }, [mensajes, chatActivoId]);
 
     // Auto-scroll suave al fondo cuando hay mensajes nuevos
     useEffect(() => {
@@ -113,31 +134,49 @@ const Chats_ai: React.FC = () => {
     const guardarChatActual = () => {
         if (mensajes.length === 0) return;
 
-        const primerTexto = mensajes[0].texto;
-        const nombreSugerido = primerTexto.length > 30 
-            ? primerTexto.substring(0, 30) + "..." 
-            : primerTexto;
+        if (chatActivoId) {
+            // Actualizar el chat que ya está abierto en vez de crear uno nuevo
+            setChatsGuardados(prev => prev.map(chat => {
+                if (chat.id === chatActivoId) {
+                    return {
+                        ...chat,
+                        mensajes: [...mensajes],
+                        fecha: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })
+                    };
+                }
+                return chat;
+            }));
+            mostrarToast("✓ Conversación actualizada");
+        } else {
+            // Es un chat nuevo: crear y asignar su ID como chat activo
+            const primerTexto = mensajes[0].texto;
+            const nombreSugerido = primerTexto.length > 30 
+                ? primerTexto.substring(0, 30) + "..." 
+                : primerTexto;
 
-        const nuevoChat: ChatGuardado = {
-            id: Date.now().toString(),
-            nombre: nombreSugerido,
-            mensajes: [...mensajes],
-            fecha: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })
-        };
+            const nuevoId = Date.now().toString();
+            const nuevoChat: ChatGuardado = {
+                id: nuevoId,
+                nombre: nombreSugerido,
+                mensajes: [...mensajes],
+                fecha: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })
+            };
 
-        const actualizados = [nuevoChat, ...chatsGuardados.filter(c => c.id !== nuevoChat.id)];
-        setChatsGuardados(actualizados);
-        localStorage.setItem("chats_astro_ai", JSON.stringify(actualizados));
-        mostrarToast("✓ Chat guardado en tu historial");
+            setChatActivoId(nuevoId);
+            setChatsGuardados(prev => [nuevoChat, ...prev]);
+            mostrarToast("✓ Chat guardado en tu historial");
+        }
     };
 
     const cargarChat = (chat: ChatGuardado) => {
+        setChatActivoId(chat.id);
         setMensajes(chat.mensajes);
         setSidebarAbierta(false);
-        mostrarToast(`Cargado: "${chat.nombre}"`);
+        mostrarToast(`Abierto: "${chat.nombre}"`);
     };
 
     const nuevoChat = () => {
+        setChatActivoId(null);
         setMensajes([]);
         setSidebarAbierta(false);
         if (textareaRef.current) {
@@ -149,7 +188,9 @@ const Chats_ai: React.FC = () => {
         e.stopPropagation();
         const filtrados = chatsGuardados.filter(c => c.id !== id);
         setChatsGuardados(filtrados);
-        localStorage.setItem("chats_astro_ai", JSON.stringify(filtrados));
+        if (chatActivoId === id) {
+            setChatActivoId(null);
+        }
         mostrarToast("Chat eliminado del historial");
     };
 
@@ -169,7 +210,8 @@ const Chats_ai: React.FC = () => {
             hora: getHoraActual() 
         };
         
-        setMensajes(prev => [...prev, nuevoMensajeUsuario]);
+        const mensajesActuales = [...mensajes, nuevoMensajeUsuario];
+        setMensajes(mensajesActuales);
         setCargando(true);
         setInput("");
 
@@ -177,7 +219,10 @@ const Chats_ai: React.FC = () => {
             const response = await fetch("http://localhost:3001/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt: query })
+                body: JSON.stringify({ 
+                    prompt: query,
+                    messages: mensajesActuales
+                })
             });
 
             if (!response.ok) {
@@ -217,6 +262,8 @@ const Chats_ai: React.FC = () => {
         c.nombre.toLowerCase().includes(busquedaHistorial.toLowerCase())
     );
 
+    const chatActivo = chatsGuardados.find(c => c.id === chatActivoId);
+
     return (
         <section className="relative flex justify-center items-center h-full w-full text-slate-100 overflow-hidden font-sans select-none">
             
@@ -250,10 +297,16 @@ const Chats_ai: React.FC = () => {
                                 <span className="px-2 py-0.5 text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full">
                                     3.1 Flash
                                 </span>
+                                {chatActivo && (
+                                    <span className="hidden sm:inline-flex items-center gap-1.5 max-w-[190px] truncate px-2.5 py-0.5 text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 rounded-full shadow-inner" title={`Chat abierto: ${chatActivo.nombre}`}>
+                                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                                        <span className="truncate">{chatActivo.nombre}</span>
+                                    </span>
+                                )}
                             </div>
                             <p className="text-xs text-slate-400 flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                Listo para responder
+                                {chatActivo ? "Continuando conversación abierta" : "Listo para responder"}
                             </p>
                         </div>
                     </div>
@@ -272,11 +325,11 @@ const Chats_ai: React.FC = () => {
                         <button
                             onClick={guardarChatActual}
                             disabled={mensajes.length === 0}
-                            title="Guardar esta conversación"
+                            title={chatActivoId ? "Actualizar esta conversación guardada" : "Guardar conversación"}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/15 hover:bg-blue-600/30 text-blue-300 hover:text-blue-200 rounded-xl text-xs font-medium transition-all border border-blue-500/30 disabled:opacity-40 disabled:pointer-events-none active:scale-95 shadow-sm"
                         >
                             <Save className="w-3.5 h-3.5 text-blue-400" />
-                            <span className="hidden sm:inline">Guardar</span>
+                            <span className="hidden sm:inline">{chatActivoId ? "Actualizar" : "Guardar"}</span>
                         </button>
 
                         <button
@@ -528,33 +581,47 @@ const Chats_ai: React.FC = () => {
                             No se encontraron resultados para "{busquedaHistorial}"
                         </div>
                     ) : (
-                        chatsFiltrados.map(chat => (
-                            <div
-                                key={chat.id}
-                                onClick={() => cargarChat(chat)}
-                                className="group relative p-3 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-indigo-500/40 cursor-pointer transition-all duration-200 shadow-sm"
-                            >
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-semibold text-slate-200 group-hover:text-white text-xs truncate mb-1">
-                                            {chat.nombre}
-                                        </p>
-                                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                                            <span>{chat.fecha}</span>
-                                            <span>•</span>
-                                            <span>{chat.mensajes.length} mensajes</span>
+                        chatsFiltrados.map(chat => {
+                            const esActivo = chat.id === chatActivoId;
+                            return (
+                                <div
+                                    key={chat.id}
+                                    onClick={() => cargarChat(chat)}
+                                    className={`group relative p-3 rounded-xl border cursor-pointer transition-all duration-200 shadow-sm ${
+                                        esActivo 
+                                            ? 'bg-indigo-950/40 border-indigo-500/60 ring-1 ring-indigo-500/30 shadow-indigo-500/10' 
+                                            : 'bg-slate-900/60 hover:bg-slate-800/80 border-slate-800/80 hover:border-indigo-500/40'
+                                    }`}
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <p className={`font-semibold text-xs truncate ${esActivo ? 'text-indigo-300 font-bold' : 'text-slate-200 group-hover:text-white'}`}>
+                                                    {chat.nombre}
+                                                </p>
+                                                {esActivo && (
+                                                    <span className="px-1.5 py-0.2 text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-full flex-shrink-0">
+                                                        Abierto
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                <span>{chat.fecha}</span>
+                                                <span>•</span>
+                                                <span>{chat.mensajes.length} mensajes</span>
+                                            </div>
                                         </div>
+                                        <button
+                                            onClick={(e) => eliminarChat(chat.id, e)}
+                                            title="Eliminar del historial"
+                                            className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={(e) => eliminarChat(chat.id, e)}
-                                        title="Eliminar del historial"
-                                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                                    >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
 
@@ -565,6 +632,7 @@ const Chats_ai: React.FC = () => {
                             onClick={() => {
                                 if (confirm("¿Estás seguro de que deseas borrar todo el historial?")) {
                                     setChatsGuardados([]);
+                                    setChatActivoId(null);
                                     localStorage.removeItem("chats_astro_ai");
                                     mostrarToast("Historial eliminado por completo");
                                 }
